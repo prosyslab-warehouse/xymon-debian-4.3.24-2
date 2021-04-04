@@ -1,0 +1,59 @@
+Subject: Multiple kfreebsd patches, additional ignored file systems
+Forwarded: http://lists.xymon.com/pipermail/xymon/2015-September/042224.html
+Last-Update: 2015-09-10
+Reviewed-By: Axel Beckert <abe@debian.org>
+
+xymon (4.3.0~beta2.dfsg-6) unstable; urgency=low
+
+  * Support GNU/kFreeBSD by adding a Makefile and a config snippet that
+    pretends we are running on Linux. (Closes: #458417)
+  * Tweak hobbitclient-linux.sh to report 'df' data without /proc/filesystems
+    mounted.
+
+ -- Christoph Berg <myon@debian.org>  Fri, 09 Apr 2010 00:17:03 +0200
+
+hobbit (4.2.0.dfsg-13) unstable; urgency=low
+
+  * Do not ignore tmpfs mountpoints in hobbitclient-linux.sh, but add
+    /dev, /dev/shm, and /lib/init/rw to the default IGNORE list in
+    /etc/hobbit/hobbit-clients.cfg. (Closes: #487157)
+
+ -- Christoph Berg <myon@debian.org>  Sat, 05 Jul 2008 14:43:23 +0200
+
+Index: xymon/client/xymonclient-linux.sh
+===================================================================
+--- xymon.orig/client/xymonclient-linux.sh	2015-10-30 16:26:24.000000000 +0100
++++ xymon/client/xymonclient-linux.sh	2015-10-30 16:26:24.000000000 +0100
+@@ -45,9 +45,14 @@
+ echo "[who]"
+ who
+ echo "[df]"
+-EXCLUDES=`cat /proc/filesystems | grep nodev | grep -v rootfs | awk '{print $2}' | xargs echo | sed -e 's! ! -x !g'`
++if test -f /proc/filesystems ; then # Linux
++	EXCLUDES=`cat /proc/filesystems | grep nodev | egrep -v 'tmpfs|rootfs' | awk '{print $2}' | xargs echo | sed -e 's! ! -x !g'`
++else # kfreebsd (or /proc not mounted)
++	EXCLUDES=`mount | grep -v '^/' | egrep -v 'tmpfs|rootfs' | awk '{print $1}' | xargs echo | sed -e 's! ! -x !g'`
++fi
+ ROOTFS=`readlink -m /dev/root`
+-df -Pl -x iso9660 -x $EXCLUDES | sed -e '/^[^ 	][^ 	]*$/{
++# kfreebsd needs an extra grep -v
++df -Pl -x iso9660 -x $EXCLUDES | grep -v '^/sys' | sed -e '/^[^ 	][^ 	]*$/{
+ N
+ s/[ 	]*\n[ 	]*/ /
+ }' -e "s&^rootfs&${ROOTFS}&"
+Index: xymon/xymond/etcfiles/analysis.cfg
+===================================================================
+--- xymon.orig/xymond/etcfiles/analysis.cfg	2015-10-30 16:26:24.000000000 +0100
++++ xymon/xymond/etcfiles/analysis.cfg	2015-10-30 16:26:24.000000000 +0100
+@@ -354,6 +354,11 @@
+ 
+ 
+ DEFAULT
++	# Ignore some usually uninteresting tmpfs mounts.
++	DISK    /dev IGNORE
++	DISK    /dev/shm IGNORE
++	DISK    /lib/init/rw IGNORE
++	DISK    /run IGNORE
+ 	# These are the built-in defaults. You should only modify these
+ 	# lines, not add new ones (no PROC, DISK, LOG ... lines).
+ 	UP      1h
